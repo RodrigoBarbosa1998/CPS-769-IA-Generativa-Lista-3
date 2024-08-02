@@ -1,12 +1,26 @@
+import openai
 import pandas as pd
 import os
 import kaggle
 import re
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import OpenAI
 
+# Substitua com sua chave API
+openai_api_key = '***************'  
+
+# Classe WeatherAssistant
 class WeatherAssistant:
     def __init__(self):
-        # Verificar se os dados já foram baixados e extraídos
         self.check_data_downloaded()
+        self.llm = OpenAI(api_key=openai_api_key, model="gpt-4o-mini")
+        self.template = PromptTemplate(
+            input_variables=['question'],
+            template=(
+                "Você é um assistente de clima que responde a perguntas com base em um dataset de clima. "
+                "Aqui está a pergunta do usuário: {question}. Responda de forma clara e concisa."
+            )
+        )
 
     def download_data(self):
         kaggle.api.authenticate()
@@ -61,6 +75,19 @@ class WeatherAssistant:
         
         return data
 
+    def answer_question(self, question):
+        # Usar o chatbot para responder à pergunta
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",  # Ou o modelo que você está usando
+            messages=[
+                {"role": "system", "content": "Você é um assistente de clima que responde a perguntas com base em um dataset de clima."},
+                {"role": "user", "content": question}
+            ],
+            max_tokens=150
+        )
+        return response.choices[0].message['content'].strip()
+
+    # Métodos adicionais para obter dados
     def get_max_temperature(self, year):
         data = self.load_data(year=year)
         max_temp = data['temperatura_do_ar_-_bulbo_seco,_horaria_°c'].max()
@@ -113,97 +140,16 @@ class WeatherAssistant:
         threshold = 20
         return average_temp < threshold
 
-    def answer_question(self, question):
-        question = question.lower()
-        
-        # Usar expressões regulares para identificar os anos
-        year_matches = re.findall(r'\b(\d{4})\b', question)
-        
-        # Se houver dois anos especificados, comparar as médias
-        if 'comparar' in question and len(year_matches) == 2:
-            year1, year2 = int(year_matches[0]), int(year_matches[1])
-            avg1 = self.get_average_temperature(year1)
-            avg2 = self.get_average_temperature(year2)
-            
-            if avg1 > avg2:
-                comparison = "maior"
-            elif avg1 < avg2:
-                comparison = "menor"
-            else:
-                comparison = "igual"
-
-            return (f"A média da temperatura no ano de {year1} foi {avg1:.2f}°C, "
-                    f"enquanto que a média de {year2} foi {avg2:.2f}°C, portanto a média de {year1} foi {comparison} do que a de {year2}.")
-        
-        # Outras condições permanecem inalteradas
-        elif 'dia mais quente' in question:
-            if len(year_matches) == 1:
-                year = int(year_matches[0])
-                day, temp = self.get_hottest_day_of_year(year)
-                return f"O dia mais quente de {year} foi {day.date()} com temperatura de {temp:.2f}°C."
-            else:
-                return "Por favor, especifique o ano."
-
-        elif 'média' in question and 'mês' in question:
-            if len(year_matches) == 1 and 'de' in question:
-                year = int(year_matches[0])
-                month_match = re.search(r'\b(\d{1,2})\b', question)
-                month = int(month_match.group(1)) if month_match else None
-                if month:
-                    avg_temp = self.get_monthly_average_temperature(year, month)
-                    return f"A média da temperatura em {month}/{year} foi {avg_temp:.2f}°C."
-                else:
-                    return "Por favor, especifique o mês."
-            else:
-                return "Por favor, especifique o ano e o mês."
-
-        elif 'média' in question:
-            if len(year_matches) == 1:
-                year = int(year_matches[0])
-                avg_temp = self.get_average_temperature(year)
-                return f"A média da temperatura no ano de {year} foi {avg_temp:.2f}°C."
-            else:
-                return "Por favor, especifique o ano."
-
-        elif 'frio' in question and 'janeiro' in question:
-            if len(year_matches) == 1:
-                year = int(year_matches[0])
-                if self.is_january_cold(year):
-                    return f"Janeiro de {year} fez frio."
-                else:
-                    return f"Janeiro de {year} não fez frio."
-            else:
-                return "Por favor, especifique o ano."
-
-        elif 'mês mais quente' in question:
-            if len(year_matches) == 1:
-                year = int(year_matches[0])
-                month, temp = self.get_monthly_max_temperature(year)
-                return f"O mês mais quente de {year} foi o mês {month} com temperatura máxima de {temp:.2f}°C."
-            else:
-                return "Por favor, especifique o ano."
-
-        elif 'maior temperatura registrada' in question:
-            year_range_match = re.search(r'(\d{4})\s*a\s*(\d{4})', question)
-            start_year = int(year_range_match.group(1)) if year_range_match else None
-            end_year = int(year_range_match.group(2)) if year_range_match else None
-            if start_year and end_year:
-                max_temp = self.get_max_temperature_in_period(start_year, end_year)
-                return f"A maior temperatura registrada no período de {start_year} a {end_year} foi {max_temp:.2f}°C."
-            else:
-                return "Por favor, especifique o período."
-
-        else:
-            return "Pergunta não reconhecida. Por favor, formule a pergunta de forma diferente."
-
-
-if __name__ == "__main__":
+# Função para interação com o usuário
+def interact_with_weather_assistant():
     assistant = WeatherAssistant()
 
-    print("Digite sua pergunta sobre dados meteorológicos (ou 'sair' para encerrar):")
     while True:
-        question = input("> ")
+        question = input("Digite sua pergunta sobre o clima ou 'sair' para encerrar: ")
         if question.lower() == 'sair':
             break
-        response = assistant.answer_question(question)
-        print(response)
+        answer = assistant.answer_question(question)
+        print(answer)
+
+if __name__ == "__main__":
+    interact_with_weather_assistant()
