@@ -96,10 +96,16 @@ class WeatherAssistant:
         max_temp = period_data['temperatura_do_ar_-_bulbo_seco,_horaria_°c'].max()
         return max_temp
 
+    def get_average_temperature(self, year):
+        data = self.load_data(year=year)
+        avg_temp = data['temperatura_do_ar_-_bulbo_seco,_horaria_°c'].mean()
+        return avg_temp
+
     def compare_yearly_averages(self, year1, year2):
         avg1 = self.get_average_temperature(year1)
         avg2 = self.get_average_temperature(year2)
-        return avg1, avg2
+        difference = avg1 - avg2
+        return avg1, avg2, difference
 
     def is_january_cold(self, year):
         average_temp = self.get_monthly_average_temperature(year, 1)
@@ -110,74 +116,86 @@ class WeatherAssistant:
     def answer_question(self, question):
         question = question.lower()
         
-        # Usar expressões regulares para identificar o ano e o mês
-        year_match = re.search(r'\b(\d{4})\b', question)
-        year = int(year_match.group(1)) if year_match else None
+        # Usar expressões regulares para identificar os anos
+        year_matches = re.findall(r'\b(\d{4})\b', question)
         
-        year_range_match = re.search(r'(\d{4})\s*a\s*(\d{4})', question)
-        start_year = int(year_range_match.group(1)) if year_range_match else None
-        end_year = int(year_range_match.group(2)) if year_range_match else None
+        # Se houver dois anos especificados, comparar as médias
+        if 'comparar' in question and len(year_matches) == 2:
+            year1, year2 = int(year_matches[0]), int(year_matches[1])
+            avg1 = self.get_average_temperature(year1)
+            avg2 = self.get_average_temperature(year2)
+            
+            if avg1 > avg2:
+                comparison = "maior"
+            elif avg1 < avg2:
+                comparison = "menor"
+            else:
+                comparison = "igual"
+
+            return (f"A média da temperatura no ano de {year1} foi {avg1:.2f}°C, "
+                    f"enquanto que a média de {year2} foi {avg2:.2f}°C, portanto a média de {year1} foi {comparison} do que a de {year2}.")
         
-        month_match = re.search(r'\b(\d{1,2})\b', question)
-        month = int(month_match.group(1)) if month_match else None
-        
-        if 'dia mais quente' in question:
-            if year:
+        # Outras condições permanecem inalteradas
+        elif 'dia mais quente' in question:
+            if len(year_matches) == 1:
+                year = int(year_matches[0])
                 day, temp = self.get_hottest_day_of_year(year)
                 return f"O dia mais quente de {year} foi {day.date()} com temperatura de {temp:.2f}°C."
             else:
                 return "Por favor, especifique o ano."
-        
+
         elif 'média' in question and 'mês' in question:
-            if year and month:
-                avg_temp = self.get_monthly_average_temperature(year, month)
-                return f"A média da temperatura em {month}/{year} foi {avg_temp:.2f}°C."
+            if len(year_matches) == 1 and 'de' in question:
+                year = int(year_matches[0])
+                month_match = re.search(r'\b(\d{1,2})\b', question)
+                month = int(month_match.group(1)) if month_match else None
+                if month:
+                    avg_temp = self.get_monthly_average_temperature(year, month)
+                    return f"A média da temperatura em {month}/{year} foi {avg_temp:.2f}°C."
+                else:
+                    return "Por favor, especifique o mês."
             else:
                 return "Por favor, especifique o ano e o mês."
-        
+
         elif 'média' in question:
-            if year:
+            if len(year_matches) == 1:
+                year = int(year_matches[0])
                 avg_temp = self.get_average_temperature(year)
                 return f"A média da temperatura no ano de {year} foi {avg_temp:.2f}°C."
             else:
                 return "Por favor, especifique o ano."
-        
+
         elif 'frio' in question and 'janeiro' in question:
-            if year:
+            if len(year_matches) == 1:
+                year = int(year_matches[0])
                 if self.is_january_cold(year):
                     return f"Janeiro de {year} fez frio."
                 else:
                     return f"Janeiro de {year} não fez frio."
             else:
                 return "Por favor, especifique o ano."
-        
-        elif 'comparar' in question:
-            year1_match = re.search(r'\b(\d{4})\b', question)
-            year2_match = re.search(r'\b(\d{4})\b', question)
-            if year1_match and year2_match:
-                year1 = int(year1_match.group(1))
-                year2 = int(year2_match.group(2))
-                avg1, avg2 = self.compare_yearly_averages(year1, year2)
-                return f"A média de temperatura em {year1} foi {avg1:.2f}°C e em {year2} foi {avg2:.2f}°C."
-            else:
-                return "Por favor, especifique ambos os anos para comparação."
-        
+
         elif 'mês mais quente' in question:
-            if year:
+            if len(year_matches) == 1:
+                year = int(year_matches[0])
                 month, temp = self.get_monthly_max_temperature(year)
                 return f"O mês mais quente de {year} foi o mês {month} com temperatura máxima de {temp:.2f}°C."
             else:
                 return "Por favor, especifique o ano."
-        
+
         elif 'maior temperatura registrada' in question:
+            year_range_match = re.search(r'(\d{4})\s*a\s*(\d{4})', question)
+            start_year = int(year_range_match.group(1)) if year_range_match else None
+            end_year = int(year_range_match.group(2)) if year_range_match else None
             if start_year and end_year:
                 max_temp = self.get_max_temperature_in_period(start_year, end_year)
                 return f"A maior temperatura registrada no período de {start_year} a {end_year} foi {max_temp:.2f}°C."
             else:
                 return "Por favor, especifique o período."
-        
+
         else:
             return "Pergunta não reconhecida. Por favor, formule a pergunta de forma diferente."
+
 
 if __name__ == "__main__":
     assistant = WeatherAssistant()
